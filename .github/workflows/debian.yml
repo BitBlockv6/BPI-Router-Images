@@ -1,52 +1,20 @@
 # .github/workflows/main.yml
-name: Debian
+name: Debian BPI-R3 Build
 
 on:
   workflow_dispatch:
     inputs:
-      bpi-r2:
-        type: boolean
-      bpi-r64:
-        type: boolean
-      bpi-r2pro:
-        type: boolean
-      bpi-r3:
-        type: boolean
-      bpi-r3mini:
-        type: boolean
-      bpi-r4:
-        type: boolean
       packages:
-        description: additional packages (separated by space)
-      kernel:
-        type: choice
-        description: linux kernel
-        options:
-          - 6.18
-          - 6.12
-          - 6.6
-          - 5.15
-      variant:
-        type: choice
-        description: board variant
-        options:
-          - ''
-          - bpi-r4-2g5
-          - bpi-r4pro
-          - bpi-r4lite
-      bootdevice:
-        type: choice
-        description: Bootdevice
-        options:
-          - sdmmc
-          - emmc
+        description: 'Zusätzliche Pakete (optional, mit Leerzeichen getrennt)'
+        type: string
+        required: false
 
 jobs:
-  debian-gdrive-upload:
+  debian-build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4 # Aktualisiert auf v4, da v2 veraltet ist
 
       - name: Setup env
         run: |
@@ -60,73 +28,25 @@ jobs:
           key: ${{ runner.os }}-chroot
           restore-keys: ${{ runner.os }}-chroot
 
-      #- name: Acquire Google access token for file download
-      #  id: google-access-token
-      #  uses: playeveryware/action-google-access-token@v1
-      #  with:
-      #    credentials: ${{ secrets.CREDENTIALS_RAW }}
-      #    scope: 'https://www.googleapis.com/auth/drive.readonly'
-
-      #- name: Download BPI-R4 kernel file
-      #  uses: playeveryware/action-google-drive-download@v1
-      #  with:
-      #    token: ${{ steps.google-access-token.outputs.token }}
-      #    file-id: 14IPr6_h0_NEe8ute6HXMUNACnHiaaab4
-      #    path: ${{ env.R4Kernel }}
-        #uses: satackey/action-google-drive@v1
-        #with:
-        #  skicka-tokencache-json: ${{ secrets.CREDENTIALS_RAW }}
-        #  download-from: https://drive.google.com/file/d/14IPr6_h0_NEe8ute6HXMUNACnHiaaab4/view?usp=drive_link
-        #  download-to: ./bpi-r4-kernel.tar.gz
-
-      - name: Install depencies
+      - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install python3 parted qemu-user-static debootstrap binfmt-support mtd-utils
+          sudo apt install -y python3 parted qemu-user-static debootstrap binfmt-support mtd-utils
 
-      - name: Build R2 Debian ${{ vars.DEBIAN_DIST }} Images
-        if: ${{ inputs.bpi-r2 }}
+      - name: Build R3 Debian Trixie Image (SDMMC)
         run: |
-          echo -e "userpackages=\"${{ inputs.packages }}\"" >> sourcefiles_bpi-r2.conf
-          ./buildimg.sh bpi-r2 ${{ vars.DEBIAN_DIST }} ${{ inputs.kernel }}
+          # Falls optionale Zusatzpakete über GitHub Actions angegeben wurden:
+          if [ -n "${{ inputs.packages }}" ]; then
+            echo -e "userpackages=\"${{ inputs.packages }}\"" >> sourcefiles_bpi-r3.conf
+          fi
+          
+          # Führt den Build exklusiv für bpi-r3, trixie und Kernel 6.18 aus
+          # Das Skript erzeugt hierbei standardmäßig das sdmmc-Image
+          ./buildimg.sh bpi-r3 trixie 6.18
 
-      - name: Build R64 Debian ${{ vars.DEBIAN_DIST }} Image
-        if: ${{ inputs.bpi-r64 }}
-        run: |
-          echo -e "userpackages=\"${{ inputs.packages }}\"" >> sourcefiles_bpi-r64.conf
-          ./buildimg.sh bpi-r64 ${{ vars.DEBIAN_DIST }} ${{ inputs.kernel }}
-
-      - name: Build R2Pro Debian ${{ vars.DEBIAN_DIST }} Image
-        if: ${{ inputs.bpi-r2pro }}
-        run: |
-          echo -e "userpackages=\"${{ inputs.packages }}\"" >> sourcefiles_bpi-r2pro.conf
-          ./buildimg.sh bpi-r2pro ${{ vars.DEBIAN_DIST }} ${{ inputs.kernel }}
-
-      - name: Build R3 Debian ${{ vars.DEBIAN_DIST }} Image
-        if: ${{ inputs.bpi-r3 }}
-        run: |
-          echo -e "userpackages=\"${{ inputs.packages }}\"" >> sourcefiles_bpi-r3.conf
-          ./buildimg.sh bpi-r3 ${{ vars.DEBIAN_DIST }} ${{ inputs.kernel }}
-
-      - name: Build R3 Mini Debian ${{ vars.DEBIAN_DIST }} Image
-        if: ${{ inputs.bpi-r3mini }}
-        run: |
-          echo -e "userpackages=\"${{ inputs.packages }}\"" >> sourcefiles_bpi-r3mini.conf
-          ./buildimg.sh bpi-r3mini ${{ vars.DEBIAN_DIST }} ${{ inputs.kernel }}
-
-      - name: Build R4 Debian ${{ vars.DEBIAN_DIST }} Image
-        if: ${{ inputs.bpi-r4 }}
-        run: |
-          echo -e "variant=${{ inputs.variant }}" > sourcefiles_bpi-r4.conf
-          #echo -e "skipkerneldownload=1\nkernelfile=${{ env.R4Kernel }}" > sourcefiles_bpi-r4.conf
-          echo -e "replacehostapd=1\nreplaceiperf=1" >> sourcefiles_bpi-r4.conf
-          echo -e "userpackages=\"${{ inputs.packages }}\"" >> sourcefiles_bpi-r4.conf
-          ./buildimg.sh bpi-r4 ${{ vars.DEBIAN_DIST }} ${{ inputs.kernel }}
-
-      - name: Upload to gdrive
-        uses: adityak74/google-drive-upload-git-action@main
+      - name: Upload Image to GitHub Artifacts
+        uses: actions/upload-artifact@v4
         with:
-          credentials: ${{ secrets.CREDENTIALS }}
-          filename: "*.img.gz*"
-          folderId: ${{ secrets.FOLDERID }}
-          overwrite: "true" # optional boolean
+          name: bpi-r3-debian-trixie-sdmmc-${{ env.DT }}
+          path: "*.img.gz*"
+          if-no-files-found: error
