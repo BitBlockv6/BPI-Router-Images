@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       packages:
-        description: 'Zusätzliche Pakete (optional, mit Leerzeichen getrennt)'
+        description: 'ppp pppoe pppoeconf ifupdown systemd-networking systemd-networkd nftables iproute2 iptables tcpdump ethtool ethtool-dev conntrack conntrack-tools dnsmasq bind9 bind9-utils unbound resolvconf wireguard-tools openssh-server dropbear fail2ban chrony systemd-timesyncd curl wget ca-certificates gnupg lsb-release sudo bash-completion vim-nox nano htop btop iotop iftop nload bmon vnstat net-tools traceroute mtr-tiny ping inetutils-traceroute iputils-ping arp-scan nmap rsync less logrotate rsyslog journalctl collectd prometheus-node-exporter smartmontools lm-sensors lm-sensors-applet usbutils pciutils lsscsi hdparm mc tmux screen git awk sed grep coreutils findutils util-linux procps psmisc bridge-utils vlan ethtool libnftables1 ipset ipcalc qrencode zstd gzip bzip2 xz-utils unzip tar make gcc g++ pkg-config python3 python3-venv python3-pip bash-completion apparmor apparmor-utils unattended-upgrades needrestart augeas-tools dhcpcd5 isc-dhcp-client irqbalance cpufrequtils thermald rclone vi vim dnsmasq hostapd syslog-ng busybox-syslog curl wget ca-certificates tail lm-sensors'
         type: string
         required: false
 
