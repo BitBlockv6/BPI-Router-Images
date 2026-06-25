@@ -32,14 +32,9 @@ for radio in $(uci show wireless | grep '=wifi-device' | cut -d'.' -f2 | cut -d'
     uci set wireless.${radio}.disabled='0'
     uci set wireless.${radio}.country='DE'
 
-    # If the board is bPi-R3, we want to make sure AX is enabled if supported by hardware
-    if [ "$ROUTER_MODEL" = "bPi-R3" ]; then
-        hwmode=$(uci get wireless.${radio}.hwmode 2>/dev/null)
-        if [ "$hwmode" = "11ax" ] || [ -z "$hwmode" ]; then
-           # Leaving hwmode to default driver support often defaults to highest, or explicit:
-           uci set wireless.${radio}.band='5g' # Will adjust per physical capability in real life, hostapd handles
-        fi
-    fi
+    # The bPi-R3 (MT7986) natively supports Wi-Fi 6 (AX) on both its 2.4GHz and 5GHz physical radios.
+    # OpenWrt configures the correct hwmode and band automatically based on the phy.
+    # No forced band='5g' is required or desired, as it would break the 2.4GHz interface.
 done
 
 # Configure WiFi Interfaces

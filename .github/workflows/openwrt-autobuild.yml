@@ -47,6 +47,14 @@ jobs:
         run: |
           git clone -b openwrt-23.05 https://git.openwrt.org/openwrt/openwrt.git openwrt
 
+      - name: Cache Downloads
+        uses: actions/cache@v4
+        with:
+          path: openwrt/dl
+          key: ${{ runner.os }}-openwrt-dl-${{ hashFiles('openwrt/feeds.conf.default') }}
+          restore-keys: |
+            ${{ runner.os }}-openwrt-dl-
+
       - name: Update and install feeds
         working-directory: ./openwrt
         run: |
@@ -82,6 +90,7 @@ jobs:
 
           # Force WPA3 dependencies
           echo "# CONFIG_PACKAGE_wpad-basic-mbedtls is not set" >> .config # Deselect basic if default
+          echo "# CONFIG_PACKAGE_wpad-basic-wolfssl is not set" >> .config
           echo "# CONFIG_PACKAGE_wpad-basic is not set" >> .config
           echo "# CONFIG_PACKAGE_wpad is not set" >> .config
           echo "CONFIG_PACKAGE_wpad-openssl=y" >> .config # Full WPA3 SAE support
