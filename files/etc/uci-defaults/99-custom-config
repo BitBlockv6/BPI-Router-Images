@@ -1,0 +1,53 @@
+#!/bin/sh
+
+# Set Root Password (using a pre-computed SHA-512 hash for "varianz3005!&!nl")
+sed -i 's|^root:[^:]*:|root:$6$3T/a90M.vD.wJuJQ$8xspTt7ypUc6t5iw6KBMsp88v0PEltBy9DFIUEFIj321TNzmsey1hLu4hOFDllFl6Xc9KRplFGDBb59lEyR2A/:|' /etc/shadow
+
+# Determine Router Model for SSID based on board name
+board=$(board_name)
+
+case "$board" in
+    *bpi-r3*)
+        ROUTER_MODEL="bPi-R3"
+        ;;
+    *linksys,mamba* | *linksys,wrt1900ac-v1*)
+        ROUTER_MODEL="LinksysWRT1900ACv1"
+        ;;
+    *linksys,caiman* | *linksys,wrt1200ac*)
+        ROUTER_MODEL="LinksysWRT1200ACv2"
+        ;;
+    *avm,fritz3370* | *avm,fritz7362sl*)
+        ROUTER_MODEL="FritzBox7362SL"
+        ;;
+    *)
+        ROUTER_MODEL="Unknown"
+        ;;
+esac
+
+SSID="CUSTOMWRT-2026${ROUTER_MODEL}"
+
+# Configure WiFi
+# Disable all WiFi radios first, then configure and enable
+for radio in $(uci show wireless | grep '=wifi-device' | cut -d'.' -f2 | cut -d'=' -f1); do
+    uci set wireless.${radio}.disabled='0'
+    uci set wireless.${radio}.country='DE'
+
+    # The bPi-R3 (MT7986) natively supports Wi-Fi 6 (AX) on both its 2.4GHz and 5GHz physical radios.
+    # OpenWrt configures the correct hwmode and band automatically based on the phy.
+    # No forced band='5g' is required or desired, as it would break the 2.4GHz interface.
+done
+
+# Configure WiFi Interfaces
+for vif in $(uci show wireless | grep '=wifi-iface' | cut -d'.' -f2 | cut -d'=' -f1); do
+    uci set wireless.${vif}.ssid="$SSID"
+    uci set wireless.${vif}.encryption='sae-mixed'
+    uci set wireless.${vif}.key='mankls-gh16121990XiNL942!&!'
+    # Using sae-mixed implicitly uses CCMP, but we can try to force it if supported
+    # uci set wireless.${vif}.cipher='ccmp' (Often handled automatically by SAE/WPA2)
+done
+
+uci commit wireless
+wifi up
+
+# Make the script exit 0 so it gets deleted after first boot
+exit 0

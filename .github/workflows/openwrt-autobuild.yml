@@ -1,0 +1,123 @@
+name: OpenWrt Autobuild
+
+on:
+  schedule:
+    - cron: '0 0 * * 6' # Run every Saturday at 00:00 UTC
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  build:
+    name: Build ${{ matrix.router }}
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: true # Stop autobuild on error
+      matrix:
+        include:
+          - router: bPi-R3
+            target: mediatek
+            subtarget: filogic
+            profile: bananapi_bpi-r3
+          - router: LinksysWRT1900ACv1
+            target: mvebu
+            subtarget: cortexa9
+            profile: linksys_wrt1900ac-v1
+          - router: LinksysWRT1200ACv2
+            target: mvebu
+            subtarget: cortexa9
+            profile: linksys_wrt1200ac-v2
+          - router: FritzBox7362SL
+            target: lantiq
+            subtarget: xrx200
+            profile: avm_fritz7362sl
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          path: custom-repo
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential clang flex bison g++ gawk gcc-multilib g++-multilib \
+          gettext git libncurses5-dev libssl-dev python3-distutils rsync unzip zlib1g-dev \
+          file wget subversion
+
+      - name: Checkout OpenWrt source
+        run: |
+          git clone -b openwrt-23.05 https://git.openwrt.org/openwrt/openwrt.git openwrt
+
+      - name: Cache Downloads
+        uses: actions/cache@v4
+        with:
+          path: openwrt/dl
+          key: ${{ runner.os }}-openwrt-dl-${{ hashFiles('openwrt/feeds.conf.default') }}
+          restore-keys: |
+            ${{ runner.os }}-openwrt-dl-
+
+      - name: Update and install feeds
+        working-directory: ./openwrt
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Apply wireless-regdb patch
+        run: |
+          cp custom-repo/patch-regdb.sh openwrt/
+          cd openwrt
+          ./patch-regdb.sh
+
+      - name: Generate initial configuration
+        working-directory: ./openwrt
+        run: |
+          echo "CONFIG_TARGET_${{ matrix.target }}=y" >> .config
+          echo "CONFIG_TARGET_${{ matrix.target }}_${{ matrix.subtarget }}=y" >> .config
+          echo "CONFIG_TARGET_${{ matrix.target }}_${{ matrix.subtarget }}_DEVICE_${{ matrix.profile }}=y" >> .config
+
+          # Basic setup for images
+          echo "CONFIG_TARGET_IMAGES_GZIP=y" >> .config
+
+          # Read the custom packages from the respective text file
+          if [ -f "../custom-repo/${{ matrix.router }}.txt" ]; then
+             echo "Reading custom packages from ${{ matrix.router }}.txt"
+             # Read packages separated by spaces or newlines, avoiding empty lines
+             cat ../custom-repo/${{ matrix.router }}.txt | tr -s ' \n' '\n' | grep -v '^$' | while read pkg; do
+               echo "CONFIG_PACKAGE_$pkg=y" >> .config
+             done
+          else
+             echo "No custom packages file found for ${{ matrix.router }}!"
+          fi
+
+          # Force WPA3 dependencies
+          echo "# CONFIG_PACKAGE_wpad-basic-mbedtls is not set" >> .config # Deselect basic if default
+          echo "# CONFIG_PACKAGE_wpad-basic-wolfssl is not set" >> .config
+          echo "# CONFIG_PACKAGE_wpad-basic is not set" >> .config
+          echo "# CONFIG_PACKAGE_wpad is not set" >> .config
+          echo "CONFIG_PACKAGE_wpad-openssl=y" >> .config # Full WPA3 SAE support
+          echo "CONFIG_PACKAGE_hostapd-utils=y" >> .config
+
+          make defconfig
+
+      - name: Copy custom files
+        run: |
+          cp -R custom-repo/files openwrt/
+
+      - name: Download packages
+        working-directory: ./openwrt
+        run: make download -j8
+
+      - name: Compile firmware
+        working-directory: ./openwrt
+        run: make -j$(nproc) || make -j1 V=s
+
+      - name: Organize output
+        run: |
+          mkdir -p output
+          find openwrt/bin/targets/ -name "*sysupgrade*" -o -name "*factory*" -o -name "*sdcard*" | xargs -I {} cp {} output/
+          cp openwrt/.config output/${{ matrix.router }}.config
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenWrt-${{ matrix.router }}
+          path: output/
